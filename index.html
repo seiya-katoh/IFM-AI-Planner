@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IFM AI Planner</title>
-    <!-- 安定したライブラリの読み込み -->
+    <!-- ライブラリ一括読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -99,12 +99,16 @@
             z-index: -1;
         }
 
+        /* UI調整 */
         *::-webkit-outer-spin-button, *::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
         input, textarea, select { -webkit-appearance: none !important; -moz-appearance: textfield !important; appearance: none !important; outline: none !important; }
         textarea::-webkit-scrollbar { display: none !important; }
         textarea { scrollbar-width: none !important; resize: vertical !important; }
         select { background-color: rgba(15, 23, 42, 0.9) !important; color: white !important; }
         select option { background-color: #020617 !important; color: #ffffff !important; }
+        
+        /* プレースホルダーの色をハッキリさせる */
+        ::placeholder { color: #94a3b8 !important; opacity: 1 !important; }
     </style>
 </head>
 <body>
@@ -114,18 +118,16 @@
         const { useState, useEffect, useRef } = React;
 
         const apiKey = ""; // Runtime provides this
-        const titleFontStyle = { fontFamily: '"Helvetica Neue", "Helvetica", "Arial", sans-serif' };
-        const bodyFontStyle = { fontFamily: '"Noto Sans JP", sans-serif' };
 
-        // 【徹底校正：helper】表示部分のクラッシュを防ぐためグローバルに配置
+        // 【校正済】表示崩れ・クラッシュを防ぐヘルパー
         const safeSplit = (data) => {
             if (!data) return [];
             if (typeof data === 'string') return data.split('\n');
-            if (typeof data === 'object') return Object.entries(data).map(([k, v]) => `・${k}：${v}`);
+            if (typeof data === 'object') return Object.entries(data).map(([k, v]) => `${k}：${v}`);
             return [data.toString()];
         };
 
-        // 【徹底校正：Icon】JSX Adjacent elements errorを完全に回避。各アイコンのパスを点検済み。
+        // 【校正済】SVGアイコン直接描画（removeChildエラー回避）
         const Icon = ({ name, size = 24, className = "" }) => {
             const icons = {
                 'upload': <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>,
@@ -147,7 +149,7 @@
             );
         };
 
-        // 【徹底校正】変数の定義漏れ・タイポを完全に修正
+        // テキスト整形表示コンポーネント
         const FormattedItem = ({ label, text }) => {
             if (!text || text.toString().trim() === "" || text === "なし" || text === "undefined") return null;
             const cleanText = text.toString().replace(/\*+/g, '').replace(/["']/g, '').trim();
@@ -177,10 +179,6 @@
             const [selectedImage, setSelectedImage] = useState(null);
 
             const fileInputRef = useRef(null);
-
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            }, [result, loading, uploadedFiles, generatingImages]);
 
             const handleInputChange = (e) => {
                 const { name, value } = e.target;
@@ -275,11 +273,11 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             instances: [{ 
-                                /* 【強力校正：日本語描画プッシュ】中国語を完全に排除し、日本の標準フォントのみをプッシュ */
-                                prompt: `CRITICAL MANDATORY REQUIREMENT: Display the Japanese text exactly using Standard Japanese Kanji/Kana. 
+                                /* 【強力校正：日本語描画プッシュ】中国語を完全に排除し、標準日本語フォントのみをプッシュ */
+                                prompt: `STRICT MANDATORY REQUIREMENT: Display the Japanese Kanji/Kana text precisely using Standard Japanese Typography fonts. 
                                 ABSOLUTE CONSTRAINT: DO NOT USE CHINESE STYLE FONTS OR CHINESE CHARACTERS. NO SIMPLIFIED CHINESE. 
                                 THE TARGET TEXT CONTENT IS: ${englishPrompt}.
-                                Style: Luxury cinematic motion graphics design. Flat premium vectors, crisp typography, 8k render. NO PHOTOGRAPHY.` 
+                                Visual Style: Luxury cinematic motion graphics design. Flat premium vectors, 8k render. NO PHOTOGRAPHY.` 
                             }],
                             parameters: { sampleCount: 1, aspectRatio: aspectRatio }
                         })
@@ -302,26 +300,25 @@
                 setResult(null);
                 setSceneImages({});
                 const systemInstruction = `あなたはプロの映像ディレクター。
-                1. 概要 (summary): 演出、カメラワークを150文字以上で具体的に記述せよ。
+                1. 概要 (summary): 演出意図、カメラワークを150文字以上で具体的に記述せよ。
                 2. 表示順序: 出力データは必ず「秒数 → 概要 → 音声 → ナレーション」の順で整理せよ。
                 3. シーン数: 尺に応じて最低6〜8枚。
                 4. 禁止: マークダウン記号、実写、中国語フォント。
-                5. 文字指定: englishPromptの先頭に「Must featured the text '[日本語]' precisely in high-quality Japanese typography」と明記せよ。
-                6. 形式: 純粋なJSONのみ。`;
+                5. 文字指定: englishPromptの先頭に「Must featured the text '[指定の日本語]' precisely in high-quality Japanese typography」と明記せよ。
+                6. 形式: JSONのみ。`;
                 try {
                     const actualSize = formData.size === 'その他' ? `${formData.customWidth}x${formData.customHeight}px` : formData.size;
                     const data = await callGemini(`案件定義: ターゲット:${formData.target}, ゴール:${formData.goal}, 尺:${formData.duration}秒, 特記:${formData.other}, サイズ:${actualSize}`, systemInstruction, uploadedFiles);
                     setResult(data);
                 } catch (err) {
-                    setError("制作指示書の生成中にエラーが発生しました。");
+                    setError("指示書の生成中にエラーが発生しました。");
                 } finally {
                     setLoading(false);
                 }
             };
 
             return (
-                <div className="min-h-screen relative overflow-x-hidden" style={bodyFontStyle}>
-                    {/* 背景レイヤー */}
+                <div className="min-h-screen relative overflow-x-hidden" style={{fontFamily: '"Noto Sans JP", sans-serif'}}>
                     <div className="bg-fluid-container">
                         <div className="bg-blob blob-vivid-1"></div>
                         <div className="bg-blob blob-vivid-2"></div>
@@ -335,7 +332,7 @@
                             <p className="font-bold text-[9px] tracking-[0.6em] uppercase text-slate-400 opacity-80">Storyboard & Creative Direction</p>
                         </header>
 
-                        {/* STEP 1: 資料解析 (校正・復旧済み) */}
+                        {/* STEP 1: 資料解析 (復旧・校正済み) */}
                         <section className="glass-card p-6 md:p-10 mb-8">
                             <div className="flex items-center gap-3 mb-8">
                                 <div className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center font-black shadow-lg text-xs">1</div>
@@ -343,7 +340,7 @@
                             </div>
                             <div className="border-2 border-dashed border-white/20 rounded-3xl p-10 hover:border-blue-400/50 bg-white/5 cursor-pointer text-center group transition-all" onClick={() => fileInputRef.current.click()}>
                                 <div className="bg-white/10 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><Icon name="upload" size={32} /></div>
-                                <p className="text-white font-black mb-1 text-sm tracking-wide">ロゴや資料をアップロード</p>
+                                <p className="text-white font-black mb-1 text-sm tracking-wide">ロゴやチラシ資料をアップロード</p>
                                 <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileUpload} />
                             </div>
                             {uploadedFiles.length > 0 && (
@@ -358,7 +355,7 @@
                             )}
                         </section>
 
-                        {/* STEP 2: 案件定義 (校正・参考例復旧済み) */}
+                        {/* STEP 2: 案件要件 (校正・参考例復旧済み) */}
                         <section className="glass-card p-6 md:p-10 mb-12">
                             <div className="flex items-center gap-3 mb-10">
                                 <div className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center font-black shadow-lg text-xs">2</div>
@@ -368,11 +365,11 @@
                                 <div className="space-y-6">
                                     <div>
                                         <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">ターゲット</label>
-                                        <input type="text" name="target" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold placeholder:text-slate-600" placeholder="例：30代のファミリー層" value={formData.target} onChange={handleInputChange} />
+                                        <input type="text" name="target" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold" placeholder="例：30代のファミリー層" value={formData.target} onChange={handleInputChange} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">目的</label>
-                                        <input type="text" name="goal" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold placeholder:text-slate-600" placeholder="例：新商品の認知拡大" value={formData.goal} onChange={handleInputChange} />
+                                        <input type="text" name="goal" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold" placeholder="例：新商品の認知拡大" value={formData.goal} onChange={handleInputChange} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">画面サイズ</label>
@@ -383,12 +380,11 @@
                                                 </select>
                                                 <Icon name="chevron-down" className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-blue-400" size={20} />
                                             </div>
-                                            {/* 【強力点検】その他入力枠の確実な表示 */}
                                             {formData.size === 'その他' && (
                                                 <div className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl animate-in slide-in-from-top-2">
-                                                    <div className="flex-1 text-center"><input type="text" name="customWidth" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="横" value={formData.customWidth} onChange={handleInputChange} /></div>
+                                                    <div className="flex-1 text-center"><input type="text" name="customWidth" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="横(px)" value={formData.customWidth} onChange={handleInputChange} /></div>
                                                     <span className="text-slate-500 font-bold">×</span>
-                                                    <div className="flex-1 text-center"><input type="text" name="customHeight" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="縦" value={formData.customHeight} onChange={handleInputChange} /></div>
+                                                    <div className="flex-1 text-center"><input type="text" name="customHeight" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="縦(px)" value={formData.customHeight} onChange={handleInputChange} /></div>
                                                 </div>
                                             )}
                                         </div>
@@ -399,23 +395,31 @@
                                         <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">BGM</label><select name="bgm" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold appearance-none" value={formData.bgm} onChange={handleInputChange}><option value="あり">あり</option><option value="なし">なし</option></select></div>
                                         <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">ナレーション</label><select name="narration" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold appearance-none" value={formData.narration} onChange={handleInputChange}><option value="あり">あり</option><option value="なし">なし</option></select></div>
                                     </div>
-                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">秒数</label><div className="relative"><input type="text" name="duration" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold pr-12 placeholder:text-slate-600" placeholder="30" value={formData.duration} onChange={handleInputChange} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-[10px]">秒</span></div></div>
-                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">特記事項</label><textarea name="other" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm h-[52px] font-bold placeholder:text-slate-600" placeholder="例：和モダンな明るい印象で。" value={formData.other} onChange={handleInputChange} /></div>
+                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">秒数</label><div className="relative"><input type="text" name="duration" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold pr-12" placeholder="例：30" value={formData.duration} onChange={handleInputChange} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-[10px]">秒</span></div></div>
+                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">特記事項</label><textarea name="other" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm h-[52px] font-bold" placeholder="例：和モダンな明るい印象で。" value={formData.other} onChange={handleInputChange} /></div>
                                 </div>
-                                <div className="md:col-span-2 mt-4"><button type="submit" disabled={loading} className="w-full py-6 rounded-3xl transition-all shadow-2xl siri-glow-button font-black uppercase tracking-[0.5em] text-sm active:scale-95">{loading ? "構成案を検討中..." : "制作指示書を出力する"}</button></div>
+                                <div className="md:col-span-2 mt-4"><button type="submit" disabled={loading} className="w-full py-6 rounded-3xl transition-all shadow-2xl siri-glow-button font-black uppercase tracking-[0.5em] text-sm active:scale-95">{loading ? "構成案を構成中..." : "制作指示書を出力する"}</button></div>
                             </form>
                         </section>
 
-                        {/* RESULT SECTION (再点検済み) */}
+                        {/* RESULT SECTION (再校正済み) */}
                         {result && (
                             <div className="space-y-24 pb-32 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                                <section><h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・基本情報</h2><div className="glass-card p-10">{safeSplit(result.basicInfo).map((line, i) => (<FormattedItem key={i} text={line} />))}</div></section>
+                                <section>
+                                    <h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・基本情報</h2>
+                                    <div className="glass-card p-10">
+                                        {safeSplit(result.basicInfo).map((line, i) => (
+                                            <FormattedItem key={i} text={line} />
+                                        ))}
+                                    </div>
+                                </section>
+
                                 <section className="space-y-24">
                                     {result.scenes.map((s, idx) => (
                                         <div key={idx} className="space-y-12 animate-in fade-in">
                                             {/* 台本: 秒数 → 概要 → 音声 → ナレーション (校正済み) */}
                                             <div className="glass-card overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.4)]">
-                                                <div className="bg-white/5 p-4 border-b border-white/10 px-6"><span className="font-black text-[10px] text-blue-400 uppercase font-mono">シーン {s.sceneNumber} 構成台本</span></div>
+                                                <div className="bg-white/5 p-4 border-b border-white/10 px-6"><span className="font-black text-[10px] text-blue-400 uppercase font-mono tracking-widest">シーン {s.sceneNumber} 構成台本</span></div>
                                                 <div className="p-8">
                                                     <FormattedItem label="秒数" text={s.time} />
                                                     <FormattedItem label="概要" text={s.summary} />
@@ -429,22 +433,58 @@
                                                 <div className="p-6 flex flex-col items-center">
                                                     <div className="bg-white/5 p-5 rounded-xl mb-6 border border-white/5 w-full text-center"><p className="text-xs text-slate-200 leading-relaxed italic opacity-80 whitespace-pre-wrap">{s.visualPromptJp}</p></div>
                                                     <div className="relative aspect-video w-full bg-black/50 rounded-2xl overflow-hidden cursor-pointer flex items-center justify-center group/img" onClick={() => sceneImages[idx] && setSelectedImage(sceneImages[idx])}>
-                                                        {sceneImages[idx] ? <><img src={sceneImages[idx]} className="w-full h-full object-cover transition-transform duration-1000" /><div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-all flex items-center justify-center gap-6 backdrop-blur-sm"><Icon name="zoom-in" size={28} className="text-white" /><div className="bg-white text-black p-2.5 rounded-full shadow-2xl active:scale-90" onClick={(e) => { e.stopPropagation(); downloadImage(sceneImages[idx], `scene_${s.sceneNumber}`); }}><Icon name="download" size={20} /></div><div className="bg-blue-600 text-white p-2.5 rounded-full shadow-2xl active:scale-90" onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }}><Icon name="refresh-ccw" size={18} /></div></div></> : <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 transition-colors"><button onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }} className="flex flex-col items-center justify-center w-full h-full group/btn relative" disabled={generatingImages[idx]}>{generatingImages[idx] ? <div className="flex flex-col items-center justify-center"><Icon name="loader-2" size={48} className="animate-spin text-blue-400 mb-4" /><span className="text-[10px] font-black text-blue-200 uppercase tracking-widest animate-pulse">Rendering...</span></div> : <div className="flex flex-col items-center justify-center"><div className="p-5 bg-white/10 rounded-full mb-4 group-hover/btn:scale-110 transition-transform border border-white/5 shadow-lg"><Icon name="image" size={32} /></div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ビジュアル生成</span></div>}</button></div>}
+                                                        {sceneImages[idx] ? (
+                                                            <>
+                                                                <img src={sceneImages[idx]} className="w-full h-full object-cover transition-transform duration-1000" />
+                                                                <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-all flex items-center justify-center gap-6 backdrop-blur-sm">
+                                                                    <Icon name="zoom-in" size={28} className="text-white" />
+                                                                    <div className="bg-white text-black p-2.5 rounded-full shadow-2xl active:scale-90 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); const link = document.createElement('a'); link.href = sceneImages[idx]; link.download = `scene_${s.sceneNumber}.png`; link.click(); }}><Icon name="download" size={20} /></div>
+                                                                    <div className="bg-blue-600 text-white p-2.5 rounded-full shadow-2xl active:scale-90 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }}><Icon name="refresh-ccw" size={18} /></div>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 transition-colors">
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }} 
+                                                                    className="flex flex-col items-center justify-center group/btn relative w-full h-full"
+                                                                    disabled={generatingImages[idx]}
+                                                                >
+                                                                    {generatingImages[idx] ? (
+                                                                        <div className="flex flex-col items-center justify-center">
+                                                                            <Icon name="loader-2" size={48} className="animate-spin text-blue-400 mb-4" />
+                                                                            <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest animate-pulse">Rendering...</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex flex-col items-center justify-center">
+                                                                            <div className="p-5 bg-white/10 rounded-full mb-4 group-hover/btn:scale-110 transition-transform border border-white/5 shadow-lg"><Icon name="image" size={32} /></div>
+                                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ビジュアル生成</span>
+                                                                        </div>
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
                                 </section>
-                                <section><h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・編集ノート</h2><div className="glass-card p-10 space-y-2">{safeSplit(result.editingNotes).map((line, i) => (<FormattedItem key={i} text={line} />))}</div></section>
+                                <section>
+                                    <h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・技術ノート</h2>
+                                    <div className="glass-card p-10 space-y-2">
+                                        {safeSplit(result.editingNotes).map((line, i) => (
+                                            <FormattedItem key={i} text={line} />
+                                        ))}
+                                    </div>
+                                </section>
                             </div>
                         )}
                     </div>
 
-                    {/* 【再校正済】拡大モーダル：×ボタンの視認性を最大化 (z-index 1010) */}
+                    {/* 【再校正済】拡大モーダル：×ボタンの視認性を最大化 (z-index 1100) */}
                     {selectedImage && (
                         <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-300" onClick={() => setSelectedImage(null)}>
-                            <button className="absolute top-8 right-8 text-black bg-white p-3 rounded-full z-[1010] border-2 border-black shadow-[0_0_60px_rgba(255,255,255,0.7)] active:scale-90 hover:bg-slate-200 transition-colors flex items-center justify-center">
+                            <button className="absolute top-8 right-8 text-black bg-white p-3 rounded-full z-[1100] border-2 border-black shadow-[0_0_60px_rgba(255,255,255,0.7)] active:scale-90 hover:bg-slate-200 transition-colors flex items-center justify-center">
                                 <Icon name="x" size={32} />
                             </button>
                             <img src={selectedImage} className="max-w-full max-h-full rounded-2xl shadow-[0_0_150px_rgba(0,0,0,1)] object-contain border border-white/10" onClick={(e) => e.stopPropagation()} />
