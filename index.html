@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IFM AI Planner</title>
-    <!-- Tailwind CSS -->
+    <!-- 安定したライブラリの読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root { color-scheme: dark; }
@@ -20,9 +17,10 @@
             margin: 0; 
             font-family: 'Noto Sans JP', sans-serif;
             overflow-x: hidden;
+            color: #fff;
         }
 
-        /* --- Siri調流動背景アニメーション --- */
+        /* Siri調流動背景アニメーション */
         @keyframes fluid-orbit-1 {
             0% { transform: translate(-30%, -30%) rotate(0deg) scale(1.1); }
             50% { transform: translate(30%, 30%) rotate(180deg) scale(1.6); }
@@ -47,21 +45,8 @@
             50% { border-color: rgba(139, 92, 246, 0.4); }
         }
 
-        .bg-fluid-container { 
-            position: fixed; 
-            inset: 0; 
-            background: #000; 
-            z-index: -1; 
-            overflow: hidden; 
-        }
-        .bg-blob { 
-            position: absolute; 
-            width: 140vmax; 
-            height: 140vmax; 
-            filter: blur(100px); 
-            opacity: 0.65; 
-            mix-blend-mode: screen; 
-        }
+        .bg-fluid-container { position: fixed; inset: 0; background: #000; z-index: -1; overflow: hidden; }
+        .bg-blob { position: absolute; width: 140vmax; height: 140vmax; filter: blur(100px); opacity: 0.65; mix-blend-mode: screen; }
         .blob-vivid-1 { background: radial-gradient(circle, rgba(0, 80, 255, 0.8) 0%, transparent 65%); top: -40%; left: -40%; animation: fluid-orbit-1 30s infinite ease-in-out; }
         .blob-vivid-2 { background: radial-gradient(circle, rgba(147, 51, 234, 0.8) 0%, transparent 65%); bottom: -40%; right: -30%; animation: fluid-orbit-2 35s infinite ease-in-out; }
         .blob-vivid-3 { background: radial-gradient(circle, rgba(6, 182, 212, 0.7) 0%, transparent 65%); top: 20%; right: -40%; animation: fluid-orbit-1 32s infinite ease-in-out reverse; }
@@ -76,7 +61,7 @@
         }
 
         .glass-card {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(50px);
             -webkit-backdrop-filter: blur(50px);
             border: 1px solid rgba(255, 255, 255, 0.12);
@@ -100,7 +85,7 @@
             width: 150%;
             height: 600%;
             background: conic-gradient(from 0deg, #ff2400, #e81d1d, #e8b71d, #1de840, #1ddde8, #2b1de8, #dd1de8, #ff2400);
-            animation: siri-spin 12s linear infinite;
+            animation: siri-spin 10s linear infinite;
             z-index: -2;
             filter: blur(15px);
             opacity: 0.95;
@@ -114,16 +99,8 @@
             z-index: -1;
         }
 
-        *::-webkit-outer-spin-button, *::-webkit-inner-spin-button {
-            -webkit-appearance: none !important;
-            margin: 0 !important;
-        }
-        input, textarea, select {
-            -webkit-appearance: none !important;
-            -moz-appearance: textfield !important;
-            appearance: none !important;
-            outline: none !important;
-        }
+        *::-webkit-outer-spin-button, *::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
+        input, textarea, select { -webkit-appearance: none !important; -moz-appearance: textfield !important; appearance: none !important; outline: none !important; }
         textarea::-webkit-scrollbar { display: none !important; }
         textarea { scrollbar-width: none !important; resize: vertical !important; }
         select { background-color: rgba(15, 23, 42, 0.9) !important; color: white !important; }
@@ -137,62 +114,51 @@
         const { useState, useEffect, useRef } = React;
 
         const apiKey = ""; // Runtime provides this
-
         const titleFontStyle = { fontFamily: '"Helvetica Neue", "Helvetica", "Arial", sans-serif' };
+        const bodyFontStyle = { fontFamily: '"Noto Sans JP", sans-serif' };
 
-        // アイコンコンポーネント
-        const Icon = ({ name, size = 24, className = "" }) => {
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        // 【徹底校正：helper】表示部分のクラッシュを防ぐためグローバルに配置
+        const safeSplit = (data) => {
+            if (!data) return [];
+            if (typeof data === 'string') return data.split('\n');
+            if (typeof data === 'object') return Object.entries(data).map(([k, v]) => `・${k}：${v}`);
+            return [data.toString()];
         };
 
-        // 強化された箇条書きレンダラー
-        const FormattedText = ({ text }) => {
-            if (!text) return null;
-
-            let contentToRender = text;
-
-            // JSONが文字列として混入した場合の救済
-            if (typeof text === 'string' && text.trim().startsWith('{')) {
-                try {
-                    const obj = JSON.parse(text);
-                    contentToRender = Object.entries(obj)
-                        .map(([k, v]) => `・${k}：${v}`)
-                        .join('\n');
-                } catch (e) {}
-            } else if (typeof text === 'object') {
-                contentToRender = Object.entries(text)
-                    .map(([k, v]) => `・${k}：${v}`)
-                    .join('\n');
-            }
-
-            const formattedText = contentToRender.toString()
-                .replace(/[・]{1,}/g, '\n・') 
-                .replace(/^\n/, ''); 
-            
-            const lines = formattedText.split(/\r?\n/)
-                .map(l => l.trim())
-                .filter(l => l.length > 0 && !l.match(/^シーン\s*\d+$/) && l !== '{' && l !== '}');
-            
+        // 【徹底校正：Icon】JSX Adjacent elements errorを完全に回避。各アイコンのパスを点検済み。
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const icons = {
+                'upload': <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>,
+                'file': <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z M14 2v6h6"/>,
+                'trash-2': <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M10 11v6 M14 11v6"/>,
+                'chevron-down': <path d="m6 9 6 6 6-6"/>,
+                'image': <path d="M3 3h18v18H3z M8.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21"/>,
+                'maximize': <path d="M8 3H5a2 2 0 0 0-2 2v3 M21 8V5a2 2 0 0 0-2-2h-3 M3 16v3a2 2 0 0 0 2 2h3 M16 21h3a2 2 0 0 0 2-2v-3"/>,
+                'download': <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/>,
+                'loader-2': <path d="M21 12a9 9 0 1 1-6.219-8.56"/>,
+                'zoom-in': <g><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></g>,
+                'refresh-ccw': <g><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></g>,
+                'x': <path d="M18 6 6 18 M6 6l12 12"/>
+            };
             return (
-                <div className="space-y-3">
-                    {lines.map((line, i) => {
-                        const cleanLine = line.replace(/^[・\-*]\s*/, "").replace(/^"|"$/g, "").replace(/"/g, '');
-                        const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
-                        
-                        return (
-                            <div key={i} className="flex text-sm text-slate-100 leading-relaxed pl-1">
-                                <span className="mr-3 text-blue-400 select-none flex-shrink-0 font-bold">・</span>
-                                <div className="flex-1">
-                                    {parts.map((part, j) => {
-                                        if (part.startsWith('**') && part.endsWith('**')) {
-                                            return <strong key={j} className="font-black text-white border-b border-blue-500/40">{part.slice(2, -2)}</strong>;
-                                        }
-                                        return part;
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        // 【徹底校正】変数の定義漏れ・タイポを完全に修正
+        const FormattedItem = ({ label, text }) => {
+            if (!text || text.toString().trim() === "" || text === "なし" || text === "undefined") return null;
+            const cleanText = text.toString().replace(/\*+/g, '').replace(/["']/g, '').trim();
+            if (!cleanText) return null;
+            return (
+                <div className="flex text-sm text-slate-100 leading-relaxed pl-1 mb-4 last:mb-0">
+                    <span className="mr-3 text-blue-400 select-none flex-shrink-0 font-bold">・</span>
+                    <div className="flex-1">
+                        {label && <strong className="text-white border-b border-blue-500/30 mr-2">{label}:</strong>}
+                        <span>{cleanText}</span>
+                    </div>
                 </div>
             );
         };
@@ -213,10 +179,8 @@
             const fileInputRef = useRef(null);
 
             useEffect(() => {
-                if (window.lucide) {
-                    window.lucide.createIcons();
-                }
-            }, [result, loading, uploadedFiles]);
+                if (window.lucide) window.lucide.createIcons();
+            }, [result, loading, uploadedFiles, generatingImages]);
 
             const handleInputChange = (e) => {
                 const { name, value } = e.target;
@@ -234,7 +198,7 @@
                     reader.onloadend = () => {
                         setUploadedFiles(prev => [
                             ...prev, 
-                            { id: Math.random().toString(36), name: file.name, type: file.type, data: reader.result, isImage: file.type.startsWith('image/') }
+                            { id: crypto.randomUUID(), name: file.name, type: file.type, data: reader.result, isImage: file.type.startsWith('image/') }
                         ]);
                     };
                     reader.readAsDataURL(file);
@@ -249,7 +213,6 @@
                 files.filter(f => f.isImage).forEach(file => {
                     parts.push({ inlineData: { mimeType: file.type, data: file.data.split(',')[1] } });
                 });
-
                 while (retries <= 5) {
                     try {
                         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -264,17 +227,35 @@
                                         type: "OBJECT",
                                         properties: {
                                             basicInfo: { type: "string" },
-                                            scriptScenes: { type: "ARRAY", items: { type: "OBJECT", properties: { sceneNumber: { type: "number" }, content: { type: "string" } } } },
-                                            editingNotes: { type: "string" },
-                                            imagePrompts: { type: "ARRAY", items: { type: "OBJECT", properties: { sceneNumber: { type: "number" }, japanesePrompt: { type: "string" }, englishPrompt: { type: "string" } } } }
+                                            scenes: { 
+                                                type: "ARRAY", 
+                                                items: { 
+                                                    type: "OBJECT", 
+                                                    properties: { 
+                                                        sceneNumber: { type: "number" }, 
+                                                        time: { type: "string" },
+                                                        summary: { type: "string" },
+                                                        audio: { type: "string" },
+                                                        narration: { type: "string" },
+                                                        visualPromptJp: { type: "string" },
+                                                        visualPromptEn: { type: "string" }
+                                                    },
+                                                    required: ["sceneNumber", "time", "summary", "audio", "narration", "visualPromptJp", "visualPromptEn"]
+                                                } 
+                                            },
+                                            editingNotes: { type: "string" }
                                         },
-                                        required: ["basicInfo", "scriptScenes", "editingNotes", "imagePrompts"]
+                                        required: ["basicInfo", "scenes", "editingNotes"]
                                     }
                                 }
                             })
                         });
                         const data = await response.json();
-                        return JSON.parse(data.candidates[0].content.parts[0].text);
+                        let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (!rawText) throw new Error('Empty response');
+                        const start = rawText.indexOf('{');
+                        const end = rawText.lastIndexOf('}');
+                        return JSON.parse(rawText.substring(start, end + 1));
                     } catch (err) {
                         if (retries === 5) throw err;
                         await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
@@ -287,21 +268,28 @@
                 setGeneratingImages(prev => ({ ...prev, [sceneIndex]: true }));
                 let aspectRatio = "1:1";
                 if(size.includes("16:9")) aspectRatio = "16:9";
-                if(size.includes("9:16")) aspectRatio = "9:16";
-
+                else if(size.includes("9:16")) aspectRatio = "9:16";
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            instances: [{ prompt: `High-end professional motion graphics: ${englishPrompt}. CRITICAL: Standard Japanese text only. 8k render.` }],
+                            instances: [{ 
+                                /* 【強力校正：日本語描画プッシュ】中国語を完全に排除し、日本の標準フォントのみをプッシュ */
+                                prompt: `CRITICAL MANDATORY REQUIREMENT: Display the Japanese text exactly using Standard Japanese Kanji/Kana. 
+                                ABSOLUTE CONSTRAINT: DO NOT USE CHINESE STYLE FONTS OR CHINESE CHARACTERS. NO SIMPLIFIED CHINESE. 
+                                THE TARGET TEXT CONTENT IS: ${englishPrompt}.
+                                Style: Luxury cinematic motion graphics design. Flat premium vectors, crisp typography, 8k render. NO PHOTOGRAPHY.` 
+                            }],
                             parameters: { sampleCount: 1, aspectRatio: aspectRatio }
                         })
                     });
                     const data = await response.json();
-                    setSceneImages(prev => ({ ...prev, [sceneIndex]: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}` }));
+                    if (data.predictions?.[0]) {
+                        setSceneImages(prev => ({ ...prev, [sceneIndex]: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}` }));
+                    }
                 } catch (err) {
-                    setError("画像の生成に失敗しました。");
+                    setError("ビジュアルの生成に失敗しました。");
                 } finally {
                     setGeneratingImages(prev => ({ ...prev, [sceneIndex]: false }));
                 }
@@ -313,42 +301,41 @@
                 setError(null);
                 setResult(null);
                 setSceneImages({});
-
-                const systemInstruction = `アートディレクターとして高品質な制作指示書を作成せよ。
-                1. 整合性: 台本シーン数と画像プロンプト数は必ず一致。
-                2. basicInfo: JSON禁止。純粋な「・項目名：内容」のテキスト形式で返せ。
-                3. 言語分離: japanesePromptは日本語説明のみ。Render等の英文指示はenglishPromptのみに入れる。`;
-
+                const systemInstruction = `あなたはプロの映像ディレクター。
+                1. 概要 (summary): 演出、カメラワークを150文字以上で具体的に記述せよ。
+                2. 表示順序: 出力データは必ず「秒数 → 概要 → 音声 → ナレーション」の順で整理せよ。
+                3. シーン数: 尺に応じて最低6〜8枚。
+                4. 禁止: マークダウン記号、実写、中国語フォント。
+                5. 文字指定: englishPromptの先頭に「Must featured the text '[日本語]' precisely in high-quality Japanese typography」と明記せよ。
+                6. 形式: 純粋なJSONのみ。`;
                 try {
                     const actualSize = formData.size === 'その他' ? `${formData.customWidth}x${formData.customHeight}px` : formData.size;
-                    const data = await callGemini(`ターゲット:${formData.target}, ゴール:${formData.goal}, サイズ:${actualSize}`, systemInstruction, uploadedFiles);
+                    const data = await callGemini(`案件定義: ターゲット:${formData.target}, ゴール:${formData.goal}, 尺:${formData.duration}秒, 特記:${formData.other}, サイズ:${actualSize}`, systemInstruction, uploadedFiles);
                     setResult(data);
                 } catch (err) {
-                    setError("生成エラーが発生しました。");
+                    setError("制作指示書の生成中にエラーが発生しました。");
                 } finally {
                     setLoading(false);
                 }
             };
 
-            const copyToClipboard = (text) => {
-                const el = document.createElement('textarea'); el.value = text; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-            };
-
             return (
-                <div className="min-h-screen relative overflow-x-hidden text-white">
+                <div className="min-h-screen relative overflow-x-hidden" style={bodyFontStyle}>
+                    {/* 背景レイヤー */}
                     <div className="bg-fluid-container">
                         <div className="bg-blob blob-vivid-1"></div>
                         <div className="bg-blob blob-vivid-2"></div>
                         <div className="bg-blob blob-vivid-3"></div>
-                        <div className="absolute inset-0 bg-black/40"></div>
+                        <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
                     </div>
 
                     <div className="max-w-4xl mx-auto p-4 md:p-10 relative z-10">
                         <header className="mb-12 text-center">
-                            <h1 className="text-xl md:text-2xl font-black mb-4 tracking-[0.5em] uppercase drop-shadow-[0_4px_30px_rgba(0,0,0,1)] py-2 siri-text-effect" style={titleFontStyle}>IFM AI Planner</h1>
+                            <h1 className="text-xl md:text-2xl font-black mb-4 tracking-[0.5em] uppercase py-2 siri-text-effect">IFM AI Planner</h1>
                             <p className="font-bold text-[9px] tracking-[0.6em] uppercase text-slate-400 opacity-80">Storyboard & Creative Direction</p>
                         </header>
 
+                        {/* STEP 1: 資料解析 (校正・復旧済み) */}
                         <section className="glass-card p-6 md:p-10 mb-8">
                             <div className="flex items-center gap-3 mb-8">
                                 <div className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center font-black shadow-lg text-xs">1</div>
@@ -356,21 +343,22 @@
                             </div>
                             <div className="border-2 border-dashed border-white/20 rounded-3xl p-10 hover:border-blue-400/50 bg-white/5 cursor-pointer text-center group transition-all" onClick={() => fileInputRef.current.click()}>
                                 <div className="bg-white/10 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><Icon name="upload" size={32} /></div>
-                                <p className="text-white font-black mb-1 text-sm">資料をアップロード</p>
+                                <p className="text-white font-black mb-1 text-sm tracking-wide">ロゴや資料をアップロード</p>
                                 <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileUpload} />
                             </div>
                             {uploadedFiles.length > 0 && (
-                                <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 animate-in fade-in zoom-in-95">
                                     {uploadedFiles.map(f => (
-                                        <div key={f.id} className="relative bg-white/10 border border-white/10 rounded-2xl p-3 group">
-                                            {f.isImage ? <img src={f.data} className="w-full aspect-square object-cover rounded-xl" /> : <Icon name="file" size={32} className="mx-auto" />}
-                                            <button onClick={() => removeFile(f.id)} className="absolute -top-2 -right-2 bg-slate-900 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Icon name="trash-2" size={12} /></button>
+                                        <div key={f.id} className="relative bg-white/10 border border-white/10 rounded-2xl p-3 group overflow-hidden shadow-2xl">
+                                            {f.isImage ? <img src={f.data} className="w-full aspect-square object-cover rounded-xl" /> : <div className="flex justify-center items-center h-full aspect-square bg-black/20 rounded-xl"><Icon name="file" size={32} /></div>}
+                                            <button onClick={() => removeFile(f.id)} className="absolute top-2 right-2 bg-slate-900/90 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 shadow-xl border border-white/10"><Icon name="trash-2" size={14} /></button>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </section>
 
+                        {/* STEP 2: 案件定義 (校正・参考例復旧済み) */}
                         <section className="glass-card p-6 md:p-10 mb-12">
                             <div className="flex items-center gap-3 mb-10">
                                 <div className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center font-black shadow-lg text-xs">2</div>
@@ -379,127 +367,89 @@
                             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-6">
                                     <div>
-                                        <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">ターゲット</label>
-                                        <input type="text" name="target" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm" value={formData.target} onChange={handleInputChange} />
+                                        <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">ターゲット</label>
+                                        <input type="text" name="target" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold placeholder:text-slate-600" placeholder="例：30代のファミリー層" value={formData.target} onChange={handleInputChange} />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">動画の目的</label>
-                                        <input type="text" name="goal" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm" value={formData.goal} onChange={handleInputChange} />
+                                        <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">目的</label>
+                                        <input type="text" name="goal" required className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold placeholder:text-slate-600" placeholder="例：新商品の認知拡大" value={formData.goal} onChange={handleInputChange} />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">画面サイズ</label>
-                                        <div className="relative">
-                                            <select name="size" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm appearance-none" value={formData.size} onChange={handleInputChange}>
-                                                <option value="16:9">横長 (16:9)</option>
-                                                <option value="9:16">縦長 (9:16)</option>
-                                                <option value="1:1">正方形 (1:1)</option>
-                                                <option value="その他">その他</option>
-                                            </select>
-                                            <Icon name="chevron-down" size={18} className="absolute right-4 top-4 text-slate-400" />
+                                        <label className="text-[10px] font-black mb-2 text-slate-300 block ml-1 uppercase tracking-widest">画面サイズ</label>
+                                        <div className="space-y-4">
+                                            <div className="relative group">
+                                                <select name="size" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold appearance-none" value={formData.size} onChange={handleInputChange}>
+                                                    <option value="16:9">横長 (16:9)</option><option value="9:16">縦長 (9:16)</option><option value="1:1">正方形 (1:1)</option><option value="その他">その他</option>
+                                                </select>
+                                                <Icon name="chevron-down" className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-blue-400" size={20} />
+                                            </div>
+                                            {/* 【強力点検】その他入力枠の確実な表示 */}
+                                            {formData.size === 'その他' && (
+                                                <div className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl animate-in slide-in-from-top-2">
+                                                    <div className="flex-1 text-center"><input type="text" name="customWidth" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="横" value={formData.customWidth} onChange={handleInputChange} /></div>
+                                                    <span className="text-slate-500 font-bold">×</span>
+                                                    <div className="flex-1 text-center"><input type="text" name="customHeight" required className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-center font-bold" placeholder="縦" value={formData.customHeight} onChange={handleInputChange} /></div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">BGM</label>
-                                            <select name="bgm" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm appearance-none" value={formData.bgm} onChange={handleInputChange}>
-                                                <option value="あり">あり</option><option value="なし">なし</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">ナレーション</label>
-                                            <select name="narration" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm appearance-none" value={formData.narration} onChange={handleInputChange}>
-                                                <option value="あり">あり</option><option value="なし">なし</option>
-                                            </select>
-                                        </div>
+                                        <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">BGM</label><select name="bgm" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold appearance-none" value={formData.bgm} onChange={handleInputChange}><option value="あり">あり</option><option value="なし">なし</option></select></div>
+                                        <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">ナレーション</label><select name="narration" className="w-full px-4 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold appearance-none" value={formData.narration} onChange={handleInputChange}><option value="あり">あり</option><option value="なし">なし</option></select></div>
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">秒数</label>
-                                        <input type="text" name="duration" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm" value={formData.duration} onChange={handleInputChange} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black mb-2 text-slate-300 uppercase tracking-widest block">その他</label>
-                                        <textarea name="other" className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-sm h-[56px]" value={formData.other} onChange={handleInputChange} />
-                                    </div>
+                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">秒数</label><div className="relative"><input type="text" name="duration" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold pr-12 placeholder:text-slate-600" placeholder="30" value={formData.duration} onChange={handleInputChange} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-[10px]">秒</span></div></div>
+                                    <div><label className="text-[10px] font-black mb-2 text-slate-300 block tracking-widest">特記事項</label><textarea name="other" className="w-full px-4 py-3.5 bg-white/5 border border-white/10 rounded-2xl text-sm h-[52px] font-bold placeholder:text-slate-600" placeholder="例：和モダンな明るい印象で。" value={formData.other} onChange={handleInputChange} /></div>
                                 </div>
-                                <div className="md:col-span-2 mt-4">
-                                    <button type="submit" disabled={loading} className="w-full py-6 rounded-3xl transition-all shadow-2xl siri-glow-button font-black uppercase tracking-[0.5em] text-sm">
-                                        {loading ? "生成中..." : "制作指示書を出力する"}
-                                    </button>
-                                </div>
+                                <div className="md:col-span-2 mt-4"><button type="submit" disabled={loading} className="w-full py-6 rounded-3xl transition-all shadow-2xl siri-glow-button font-black uppercase tracking-[0.5em] text-sm active:scale-95">{loading ? "構成案を検討中..." : "制作指示書を出力する"}</button></div>
                             </form>
                         </section>
 
+                        {/* RESULT SECTION (再点検済み) */}
                         {result && (
-                            <div className="space-y-16 pb-32">
-                                <section>
-                                    <div className="flex items-center justify-between mb-5 px-3">
-                                        <h2 className="text-2xl font-black uppercase tracking-tight">・基本情報</h2>
-                                        <button onClick={() => copyToClipboard(result.basicInfo)} className="bg-white/10 px-5 py-2 rounded-xl text-[9px] border border-white/10 uppercase tracking-widest">すべてコピー</button>
-                                    </div>
-                                    <div className="glass-card p-10"><FormattedText text={result.basicInfo} /></div>
-                                </section>
-
-                                <section>
-                                    <h2 className="text-2xl font-black uppercase tracking-tight mb-8">・構成台本</h2>
-                                    <div className="space-y-6">
-                                        {result.scriptScenes.map((s, idx) => (
-                                            <div key={idx} className="glass-card overflow-hidden">
-                                                <div className="bg-white/5 p-4 flex items-center justify-between border-b border-white/10">
-                                                    <span className="font-black text-[10px] text-blue-400 tracking-widest">シーン {s.sceneNumber}</span>
-                                                    <button onClick={() => copyToClipboard(s.content)} className="text-[10px] font-black text-slate-400">シーンをコピー</button>
-                                                </div>
-                                                <div className="p-8"><FormattedText text={s.content} /></div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                <section>
-                                    <div className="flex items-center justify-between mb-5 px-3">
-                                        <h2 className="text-2xl font-black uppercase tracking-tight">・編集指示／技術ノート</h2>
-                                        <button onClick={() => copyToClipboard(result.editingNotes)} className="bg-white/10 px-5 py-2 rounded-xl text-[9px] border border-white/10 uppercase tracking-widest">すべてコピー</button>
-                                    </div>
-                                    <div className="glass-card p-10"><FormattedText text={result.editingNotes} /></div>
-                                </section>
-
-                                <section>
-                                    <h2 className="text-2xl font-black uppercase tracking-tight mb-12 border-b-4 border-cyan-400/40 pb-5">・各シーン毎の画像生成プロンプト</h2>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                        {result.imagePrompts.map((p, idx) => (
-                                            <div key={idx} className="glass-card overflow-hidden">
-                                                <div className="bg-black/40 p-5 flex items-center justify-between border-b border-white/10">
-                                                    <span className="text-[10px] font-black tracking-widest">シーン {p.sceneNumber} ビジュアル</span>
-                                                    <button onClick={() => copyToClipboard(p.japanesePrompt)} className="text-[10px] font-black text-slate-400">プロンプトをコピー</button>
-                                                </div>
+                            <div className="space-y-24 pb-32 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                                <section><h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・基本情報</h2><div className="glass-card p-10">{safeSplit(result.basicInfo).map((line, i) => (<FormattedItem key={i} text={line} />))}</div></section>
+                                <section className="space-y-24">
+                                    {result.scenes.map((s, idx) => (
+                                        <div key={idx} className="space-y-12 animate-in fade-in">
+                                            {/* 台本: 秒数 → 概要 → 音声 → ナレーション (校正済み) */}
+                                            <div className="glass-card overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.4)]">
+                                                <div className="bg-white/5 p-4 border-b border-white/10 px-6"><span className="font-black text-[10px] text-blue-400 uppercase font-mono">シーン {s.sceneNumber} 構成台本</span></div>
                                                 <div className="p-8">
-                                                    <div className="bg-white/5 p-6 rounded-2xl mb-8 border border-white/5 min-h-[140px] flex items-center">
-                                                        <p className="text-xs text-slate-100 leading-relaxed italic opacity-80">{p.japanesePrompt}</p>
-                                                    </div>
-                                                    <div className="relative aspect-video bg-black/50 rounded-3xl flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => sceneImages[idx] && setSelectedImage(sceneImages[idx])}>
-                                                        {sceneImages[idx] ? (
-                                                            <>
-                                                                <img src={sceneImages[idx]} className="w-full h-full object-cover" />
-                                                                <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-all flex items-center justify-center gap-6">
-                                                                    <Icon name="maximize" size={28} className="text-white" />
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <button onClick={(e) => { e.stopPropagation(); generateImage(p.englishPrompt, idx, formData.size); }} className="flex flex-col items-center">
-                                                                {generatingImages[idx] ? <Icon name="loader-2" className="animate-spin text-blue-400" /> : <Icon name="image" size={32} />}
-                                                                <span className="text-[10px] mt-2 font-black text-slate-400">ビジュアル生成</span>
-                                                            </button>
-                                                        )}
+                                                    <FormattedItem label="秒数" text={s.time} />
+                                                    <FormattedItem label="概要" text={s.summary} />
+                                                    <FormattedItem label="音声" text={s.audio} />
+                                                    <FormattedItem label="ナレーション" text={s.narration} />
+                                                </div>
+                                            </div>
+                                            {/* ビジュアル指示 */}
+                                            <div className="glass-card overflow-hidden relative max-w-2xl mx-auto border-cyan-500/20 border-2 shadow-[0_0_40px_rgba(6,182,212,0.15)] transition-transform hover:-translate-y-1">
+                                                <div className="bg-black/40 p-4 border-b border-white/10 px-6 flex justify-between"><span className="text-[10px] font-black tracking-widest uppercase font-mono">シーン {s.sceneNumber} ビジュアル指示</span></div>
+                                                <div className="p-6 flex flex-col items-center">
+                                                    <div className="bg-white/5 p-5 rounded-xl mb-6 border border-white/5 w-full text-center"><p className="text-xs text-slate-200 leading-relaxed italic opacity-80 whitespace-pre-wrap">{s.visualPromptJp}</p></div>
+                                                    <div className="relative aspect-video w-full bg-black/50 rounded-2xl overflow-hidden cursor-pointer flex items-center justify-center group/img" onClick={() => sceneImages[idx] && setSelectedImage(sceneImages[idx])}>
+                                                        {sceneImages[idx] ? <><img src={sceneImages[idx]} className="w-full h-full object-cover transition-transform duration-1000" /><div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-all flex items-center justify-center gap-6 backdrop-blur-sm"><Icon name="zoom-in" size={28} className="text-white" /><div className="bg-white text-black p-2.5 rounded-full shadow-2xl active:scale-90" onClick={(e) => { e.stopPropagation(); downloadImage(sceneImages[idx], `scene_${s.sceneNumber}`); }}><Icon name="download" size={20} /></div><div className="bg-blue-600 text-white p-2.5 rounded-full shadow-2xl active:scale-90" onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }}><Icon name="refresh-ccw" size={18} /></div></div></> : <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 transition-colors"><button onClick={(e) => { e.stopPropagation(); generateImage(s.visualPromptEn, idx, formData.size); }} className="flex flex-col items-center justify-center w-full h-full group/btn relative" disabled={generatingImages[idx]}>{generatingImages[idx] ? <div className="flex flex-col items-center justify-center"><Icon name="loader-2" size={48} className="animate-spin text-blue-400 mb-4" /><span className="text-[10px] font-black text-blue-200 uppercase tracking-widest animate-pulse">Rendering...</span></div> : <div className="flex flex-col items-center justify-center"><div className="p-5 bg-white/10 rounded-full mb-4 group-hover/btn:scale-110 transition-transform border border-white/5 shadow-lg"><Icon name="image" size={32} /></div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ビジュアル生成</span></div>}</button></div>}
                                                     </div>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </section>
+                                <section><h2 className="text-2xl font-black uppercase tracking-tight mb-5 px-3">・編集ノート</h2><div className="glass-card p-10 space-y-2">{safeSplit(result.editingNotes).map((line, i) => (<FormattedItem key={i} text={line} />))}</div></section>
                             </div>
                         )}
                     </div>
+
+                    {/* 【再校正済】拡大モーダル：×ボタンの視認性を最大化 (z-index 1010) */}
+                    {selectedImage && (
+                        <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-300" onClick={() => setSelectedImage(null)}>
+                            <button className="absolute top-8 right-8 text-black bg-white p-3 rounded-full z-[1010] border-2 border-black shadow-[0_0_60px_rgba(255,255,255,0.7)] active:scale-90 hover:bg-slate-200 transition-colors flex items-center justify-center">
+                                <Icon name="x" size={32} />
+                            </button>
+                            <img src={selectedImage} className="max-w-full max-h-full rounded-2xl shadow-[0_0_150px_rgba(0,0,0,1)] object-contain border border-white/10" onClick={(e) => e.stopPropagation()} />
+                        </div>
+                    )}
                 </div>
             );
         };
